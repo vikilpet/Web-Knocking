@@ -533,7 +533,7 @@ def main():
 		status, data = rosapi_send(
 			**sett.rosapi_args
 			, cmd=[r'/log/info'
-				, "=message=    knock-knock"]
+				, "=message=knock-knock"]
 			, print_debug=sett.general['developer']
 		)
 		if status:
