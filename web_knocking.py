@@ -542,7 +542,7 @@ def main():
 			log_error(
 				f'Access to device error: {data}\n'
 				+ 'Check "/ip services"\n'
-				+ 'Check firewall\n'
+				+ 'Check firewalls\n'
 			)
 	if sett.general['developer']:
 		print('\nDeveloper mode\n')
