@@ -379,25 +379,33 @@ def decision(path:str, ip:str)->list:
 		return False, repr(e)
 
 def print_users():
-	print('\nUSER        LAST IP         LAST DAY'
-		+ '  LAST ACCESS')
+	headers = ['USER', 'LAST DAY', 'LAST IP'
+		, 'LAST ACCESS']
+	rows = [headers]
 	for u in sett.users:
 		if sett.users[u]['ips']:
 			last_ip = sett.users[u]['ips'][-1]
 		else:
 			last_ip = '-'
-		last_day = sett.users[u].get('last_day', '')
-		if last_day == None: last_day = '-'
 		last_access = sett.users[u].get('last_access', None)
 		if last_access:
 			last_access = last_access.strftime(
 				'%Y-%m-%d %H:%M:%S')
-		else:
-			last_access = '-'
-		print(
-			f'{u:{12}}{last_ip:{16}}'
-			+ f'{last_day:{10}}{last_access}'
-		)
+		rows.append([
+			u
+			, sett.users[u].get('last_day', None)
+			, last_ip
+			, last_access
+		])
+	for row in rows:
+		row[:] = [i if i else '-' for i in row]
+	col_sizes = [
+		max( map(len, col)) for col in zip(*rows)
+	]
+	template = '  '.join(
+		[ '{{:<{}}}'.format(s) for s in col_sizes ]
+	)
+	for row in rows: print(template.format(*row))
 	print('\n')
 
 def print_ips():
@@ -496,7 +504,8 @@ def main():
 	logger.addHandler(ch)
 
 	if os.path.exists('files/index.html'):
-		with open('files/index.html') as fd:
+		with open('files/index.html'
+		, encoding='utf-8-sig') as fd:
 			sett.html = fd.read()
 	else:
 		sett.html = resources.HTML_DEFAULT
