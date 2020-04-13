@@ -1,4 +1,5 @@
 ﻿# Web Knocking
+![Screenshot](https://user-images.githubusercontent.com/43970835/79136043-63845b00-7dc1-11ea-9e30-6d4e011c2bc3.png)
 
 ## Как это работает
 Это веб-сервер на Python.

@@ -1,4 +1,5 @@
 ﻿# Web Knocking
+![Screenshot](https://user-images.githubusercontent.com/43970835/79135939-3172f900-7dc1-11ea-9d26-f923c47d47b6.png)
 
 ## How it works
 It is a web server written in Python.
