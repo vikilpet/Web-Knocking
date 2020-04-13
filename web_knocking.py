@@ -4,16 +4,14 @@ import logging
 from http.server import BaseHTTPRequestHandler \
 	, ThreadingHTTPServer
 import os
-import time
-from operator import itemgetter
 import datetime
-from netmiko import ConnectHandler
 import resources
 from rosapi import rosapi_send
 
-APP_VERSION = 'v2020-04-12'
+APP_VERSION = 'v2020-04-13'
 INI_FILE = 'web_knocking.ini'
 DEF_DEVICE_TYPE = 'mikrotik_routeros'
+PASS_SEP = '_'
 
 
 sett = None
@@ -196,6 +194,7 @@ def process_ip(ip:str, behavior:str
 			reason - ban immediately without
 				checking 'black_threshold'
 	'''
+
 	if not reason: reason = behavior
 	if behavior != 'good' \
 	and ip in sett.general['safe_hosts']:
@@ -242,8 +241,7 @@ def process_ip(ip:str, behavior:str
 		elif behavior == 'danger':
 			sett.ips[ip]['status'] = 'black'
 			log_info(
-				f'add {ip} to black list'
-				+ f' for: {reason}')
+				f'add {ip} to black list: {reason}')
 			status, data = send_ip(
 				ip
 				, list_name = \
@@ -286,17 +284,15 @@ def decision(path:str, ip:str)->list:
 		message = ''
 		if path == '/':
 			process_ip(ip, 'danger', 'root')
-			message = 'ban'
+			message = lang.ban
 		elif path.startswith('/access'):
-			passcode = path.split('?')[1]
+			passcode = path.split(PASS_SEP)[1]
 			user_name = None
 			last_day = None
 			for u in sett.users:
 				if sett.users[u]['passcode'] == passcode:
 					user_name = u
-					last_day = sett.users[u][
-						'last_day'
-					]
+					last_day = sett.users[u]['last_day']
 					break
 			if user_name:
 				if last_day:
@@ -320,14 +316,19 @@ def decision(path:str, ip:str)->list:
 							, timeout=sett.general['temp_timeout']
 						)
 						if status:
-							message =  f'{user_name}, valid date access'
+							message = lang.temp_timeout_text \
+								.format(user_name)
 						else:
-							message = 'valid date access error'
+							message = lang.access_error \
+								.format(user_name)
 					else:
 						sett.users[user_name]['last_access'] = \
 							datetime.datetime.now()
+						log_info(f'date expired: {user_name} (IP {ip})')
 						process_ip(ip, 'bad', 'date expired')
-						message = f'{user_name}, access is expired'
+						message = lang.pass_expired \
+							.format(user_name
+								, last_day.strftime('%d.%m.%Y'))
 				else:
 					log_info(f'permanent access: {user_name} (IP {ip})')
 					process_ip(ip, 'good', 'permanent access')
@@ -342,16 +343,21 @@ def decision(path:str, ip:str)->list:
 						, timeout=sett.general['perm_timeout']
 					)
 					if status:
-						message = f'{user_name}, access granted'
+						message = lang.perm_timeout_text \
+							.format(user_name)
+
 					else:
 						log_debug(f'send ip: {data}')
-						message = 'access error'
+						message = lang.access_error \
+							.format(user_name)
+				print_users()
 			else:
-				message = f'unknown user "{passcode[:20]}"'
+				message = lang.pass_unknown
 				process_ip(ip, 'bad', 'unknown user')
 		elif path == '/status':
 			if ip in sett.general['safe_hosts']:
-				print_users()
+				if sett.general['developer']:
+					print_users()
 				if sett.ips:
 					last_ip = list(sett.ips.keys())[-1]
 					last_reason = sett.ips[last_ip]['reason']
@@ -363,10 +369,10 @@ def decision(path:str, ip:str)->list:
 				message = f'last ip: {last_ip}, status: {last_reason}'
 			else:
 				process_ip(ip, 'danger', 'status unsafe')
-				message = 'ban'
+				message = lang.ban
 		else:
 			process_ip(ip, 'danger', 'wrong path')
-			message = 'ban'
+			message = lang.ban
 		return True, message			
 	except Exception as e:
 		process_ip(ip, 'bad', 'decision error')
@@ -424,7 +430,7 @@ class KnockHandler(BaseHTTPRequestHandler):
 			s.send_response(200)
 			s.send_header('Content-type','text/html; charset=utf-8')
 			s.end_headers()
-			s.wfile.write(bytes('ban', 'utf-8'))
+			s.wfile.write(bytes(lang.ban, 'utf-8'))
 		else:
 			super().send_error(code, message, explain) 
 
@@ -445,11 +451,12 @@ class KnockHandler(BaseHTTPRequestHandler):
 			message = 'Decision error'
 		page = sett.html.format(
 			message=message
-			, timestamp=time.strftime('%Y.%m.%d %H:%M:%S')
-			, ip_address=s.address_string()
-			, ip_capt=lang.ip_capt
-			, time_capt=lang.time_capt
-			, page_title=lang.page_title
+			, timestamp = datetime.datetime.now() \
+				.strftime('%Y.%m.%d %H:%M:%S')
+			, ip_address = s.address_string()
+			, ip_capt = lang.ip_capt
+			, time_capt = lang.time_capt
+			, page_title = lang.page_title
 		).replace('\n', '').replace('\t', '')
 		s.wfile.write(bytes(page, 'utf-8'))
 

@@ -12,27 +12,27 @@ homepage=Homepage: https://github.com/vikilpet/
 donate=Donate, if you like it: https://www.paypal.me/vikil
 time_capt=Time
 ip_capt=Your IP
-page_title=Web Knocking
-access_sorry=Sorry, {}, there is some error
-pass_expired={}, your passcode is expired: {}
+page_title=Knock-knock
+access_error={}<br>there is some error
+pass_expired={}<br>your passcode is expired: {}
 pass_unknown=Unknown passcode
 ban=Ban
-perm_timeout_text=access granted
-temp_timeout_text=access granted for 8 hours
+perm_timeout_text={}<br>access granted
+temp_timeout_text={}<br>access granted for 8 hours
 '''
 
 dictionary_ru='''\
 homepage=Домашняя страница: https://vikilpet.wordpress.com/
-donate=Донат: https://www.paypal.me/vikil
+donate=Благодарю за использование
 time_capt=Время
 ip_capt=Ваш IP
-page_title=Web Knocking
-access_sorry=Извиняюсь, {}, какая-то ошибка доступа
-pass_expired={}, ваш код доступа уже истёк: {}
+page_title=Тук-тук
+access_error={}<br>какая-то ошибка
+pass_expired={}<br>ваш код доступа уже истёк: {}
 pass_unknown=Неизвестный код доступа
 ban=Бан
-perm_timeout_text=доступ открыт
-temp_timeout_text=доступ открыт на 8 часов
+perm_timeout_text={}<br>доступ открыт
+temp_timeout_text={}<br>доступ открыт на 8 часов
 '''
 
 HTML_DEFAULT = '''\
@@ -77,7 +77,7 @@ HTML_DEFAULT = '''\
 			<p class="info">
 				{ip_capt}: {ip_address}<br>
 				{time_capt}: {timestamp}<br>
-				<a href="https://vikilpet.wordpress.com/">© vikilpet.wordpress.com</a><br>
+				<a href="https://github.com/vikilpet/">© https://github.com/vikilpet/</a><br>
 			</p>
 		</div>
 	</div>

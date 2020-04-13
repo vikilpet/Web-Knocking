@@ -19,11 +19,9 @@ Just download the archive from the release page.
 ### Option 2: Python
 **Requirements:** Python 3.8; Windows 7+
 
-Theoretically it should also work on Linux, but I haven't checked.
+It should also work on Linux, but I haven't checked.
 
-Download the project, install the dependencies:
-
-	pip install -r requirements.txt
+Just download the project.
 
 ## Usage
 Change settings in *settings.ini* to your own.
