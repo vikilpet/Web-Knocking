@@ -9,7 +9,7 @@ It is assumed that for the white list you allow something, and for the black lis
 
 For users who need to connect outside the office, we give a link like this:
 
-	http://100.200.1.2:1212/access?SeCrEtCoDe
+	http://100.100.1.2:2020/access_SeCrEtCoDe
 
 
 ## Setup

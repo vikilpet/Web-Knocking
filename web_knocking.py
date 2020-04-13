@@ -176,7 +176,7 @@ def log_info(msg): logger.info(msg)
 def log_error(msg): logger.error(msg)
 
 def is_ros()->bool:
-	'Is it MikroTik device?'
+	'Is it a MikroTik device?'
 	return sett.device['device_type'] == \
 		DEF_DEVICE_TYPE
 
@@ -447,8 +447,8 @@ class KnockHandler(BaseHTTPRequestHandler):
 		if status:
 			message = data
 		else:
-			log_error(f'decision error: {data}')
-			message = 'Decision error'
+			log_debug(f'decision error: {data}')
+			message = lang.ban
 		page = sett.html.format(
 			message=message
 			, timestamp = datetime.datetime.now() \
