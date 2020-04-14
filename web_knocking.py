@@ -8,7 +8,7 @@ import datetime
 import resources
 from rosapi import rosapi_send
 
-APP_VERSION = 'v2020-04-13'
+APP_VERSION = 'v2020-04-14'
 INI_FILE = 'web_knocking.ini'
 DEF_DEVICE_TYPE = 'mikrotik_routeros'
 PASS_SEP = '_'
@@ -211,7 +211,12 @@ def process_ip(ip:str, behavior:str
 				+ f' ({behavior}: {reason})'
 			)
 			return True, None
-	if not ip in sett.ips:
+	if ip in sett.ips:
+		if sett.ips[ip]['status'] == 'white' \
+		and behavior == 'port scan':
+			log_debug(f'white ip ({ip}) port scan')
+			behavior = 'bad'
+	else:
 		sett.ips[ip] = {
 			'counter' : 0
 			, 'status' : 'grey'
@@ -356,17 +361,27 @@ def decision(path:str, ip:str)->list:
 				process_ip(ip, 'bad', 'unknown user')
 		elif path == '/status':
 			if ip in sett.general['safe_hosts']:
-				if sett.general['developer']:
-					print_users()
-				if sett.ips:
-					last_ip = list(sett.ips.keys())[-1]
-					last_reason = sett.ips[last_ip]['reason']
-					last_ip = '.'.join(last_ip.split('.')[:2]) \
-						 + '.*.*'
-				else:
-					last_ip = '-'
-					last_reason = '-'
-				message = f'last ip: {last_ip}, status: {last_reason}'
+				try:
+					last_acc = max(
+						d['last_access']
+							for d in sett.users.values()
+								if d['last_access']
+					)
+					for u in sett.users:
+						if sett.users[u]['last_access'] == last_acc:
+							last_user = u
+							last_ip = sett.users[u]['ips'][-1]
+							break
+					message = '{}\t{}\t{}'.format(
+						last_user
+						, last_acc.strftime('%Y.%m.%d %H:%M:%S')
+						, '.'.join(
+							last_ip.split('.')[:2]
+						) + '.*.*'
+					)
+				except Exception as e:
+					log_debug('status error: ' + repr(e))
+					message = 'nobody\tnever\nnowhere'
 			else:
 				process_ip(ip, 'danger', 'status unsafe')
 				message = lang.ban
@@ -379,6 +394,7 @@ def decision(path:str, ip:str)->list:
 		return False, repr(e)
 
 def print_users():
+	'Print the dict of users as a table'
 	headers = ['USER', 'LAST DAY', 'LAST IP'
 		, 'LAST ACCESS']
 	rows = [headers]
@@ -387,10 +403,11 @@ def print_users():
 			last_ip = sett.users[u]['ips'][-1]
 		else:
 			last_ip = '-'
-		last_access = sett.users[u].get('last_access', None)
-		if last_access:
-			last_access = last_access.strftime(
-				'%Y-%m-%d %H:%M:%S')
+		try:
+			last_access = sett.users[u] \
+				['last_access'].strftime('%Y.%m.%d %H:%M:%S')
+		except:
+			last_access = '-'
 		rows.append([
 			u
 			, sett.users[u].get('last_day', None)
@@ -457,15 +474,18 @@ class KnockHandler(BaseHTTPRequestHandler):
 		else:
 			log_debug(f'decision error: {data}')
 			message = lang.ban
-		page = sett.html.format(
-			message=message
-			, timestamp = datetime.datetime.now() \
-				.strftime('%Y.%m.%d %H:%M:%S')
-			, ip_address = s.address_string()
-			, ip_capt = lang.ip_capt
-			, time_capt = lang.time_capt
-			, page_title = lang.page_title
-		).replace('\n', '').replace('\t', '')
+		if s.path == '/status':
+			page = message
+		else:
+			page = sett.html.format(
+				message=message
+				, timestamp = datetime.datetime.now() \
+					.strftime('%Y.%m.%d %H:%M:%S')
+				, ip_address = s.address_string()
+				, ip_capt = lang.ip_capt
+				, time_capt = lang.time_capt
+				, page_title = lang.page_title
+			).replace('\n', '').replace('\t', '')
 		s.wfile.write(bytes(page, 'utf-8'))
 
 	def log_message(s, msg_format, *args):
