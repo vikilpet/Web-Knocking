@@ -213,8 +213,8 @@ def process_ip(ip:str, behavior:str
 			return True, None
 	if ip in sett.ips:
 		if sett.ips[ip]['status'] == 'white' \
-		and behavior == 'port scan':
-			log_debug(f'white ip ({ip}) port scan')
+		and behavior == 'danger':
+			log_debug(f'white ip ({ip}) {reason}')
 			behavior = 'bad'
 	else:
 		sett.ips[ip] = {
