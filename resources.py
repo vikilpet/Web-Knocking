@@ -1,4 +1,4 @@
-﻿class Language():
+class Language():
 	def __init__(self, language:str='en'):
 		if language == 'ru':
 			lang_str = dictionary_ru

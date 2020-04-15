@@ -1,4 +1,3 @@
-﻿# 2020.04.01
 
 import configparser
 import logging
@@ -88,7 +87,7 @@ class Settings:
 		config.optionxform = str
 		try:
 			with open(INI_FILE, 'tr'
-			, encoding='utf-8-sig') as fd:
+			, encoding='utf-8') as fd:
 				config.read_file(fd)
 		except FileNotFoundError:
 			log_error(f'{INI_FILE} file not found'
@@ -559,7 +558,7 @@ def main():
 		logger.addHandler(fh)
 	if os.path.exists('files/index.html'):
 		with open('files/index.html'
-		, encoding='utf-8-sig') as fd:
+		, encoding='utf-8') as fd:
 			sett.html = fd.read()
 	else:
 		sett.html = resources.HTML_DEFAULT
