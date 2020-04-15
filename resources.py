@@ -54,19 +54,23 @@ HTML_DEFAULT = '''\
 				position: relative;
 				left: -50%;
 				/*popup-styles*/
-				background-color: 				padding: 20px;
+				background-color: #eee;
+				padding: 20px;
 				border-radius: 10px;
 			}}
 			html {{
-				background-color: 			}}
+				background-color: #ddd;
+			}}
 			hr {{
-				color: 			}}
+				color: #fff;
+			}}
 			.info {{
 				/*text-align: left;*/
 				font-family: Verdana;
 				line-height: 150%;
-				font-size: xx-small;
-				color: 			}}
+				font-size: small;
+				color: #999;
+			}}
 		</style>
 	</head>
 <body>

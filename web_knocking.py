@@ -1,6 +1,8 @@
-﻿
+﻿# 2020.04.01
+
 import configparser
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from http.server import BaseHTTPRequestHandler \
 	, ThreadingHTTPServer
 import os
@@ -8,7 +10,7 @@ import datetime
 import resources
 from rosapi import rosapi_send
 
-APP_VERSION = 'v2020-04-14'
+APP_VERSION = 'v2020-04-15'
 INI_FILE = 'web_knocking.ini'
 DEF_DEVICE_TYPE = 'mikrotik_routeros'
 PASS_SEP = '_'
@@ -42,8 +44,6 @@ DEF_OPT_GENERAL = [
 	, ('language', 'en')
 	, ('port', 80)
 	, ('perm_timeout', '7d 00:00:00')
-	, ('perm_timeout_text'
-		, 'access granted for one week')
 	, ('temp_timeout', '08:00:00')
 	, ('cmd', '/ip firewall address-list add'
 			+ ' list={list_name} address={ip}'
@@ -55,6 +55,7 @@ DEF_OPT_GENERAL = [
 	, ('black_threshold', 3)
 	, ('safe_hosts', ['127.0.0.1'])
 	, ('url_prefix', 'http://localhost/')
+	, ('log_file', False)
 ]
 DEF_OPT_DEVICE = [
 	('device_type', DEF_DEVICE_TYPE)
@@ -199,7 +200,7 @@ def process_ip(ip:str, behavior:str
 	if behavior != 'good' \
 	and ip in sett.general['safe_hosts']:
 		log_debug(
-			f'do not ban safe host {ip}'
+			f'IP {ip} - do not ban safe host'
 			+ f' ({behavior}: {reason})'
 		)
 		return True, None
@@ -207,14 +208,14 @@ def process_ip(ip:str, behavior:str
 	and ip in sett.ips:
 		if sett.ips[ip]['status'] == 'good':
 			log_debug(
-				f'do not ban white ip {ip}'
+				f'IP {ip} - do not ban white ip'
 				+ f' ({behavior}: {reason})'
 			)
 			return True, None
 	if ip in sett.ips:
 		if sett.ips[ip]['status'] == 'white' \
 		and behavior == 'danger':
-			log_debug(f'white ip ({ip}) {reason}')
+			log_debug(f'IP {ip} - white ip {behavior}: {reason}')
 			behavior = 'bad'
 	else:
 		sett.ips[ip] = {
@@ -242,7 +243,7 @@ def process_ip(ip:str, behavior:str
 			sett.ips[ip]['counter'] = 0
 			sett.ips[ip]['status'] = 'white'
 		elif behavior == 'bad':
-			log_debug(f'bad behavior of IP {ip}: {reason}')
+			log_debug(f'IP {ip} - bad behavior: {reason}')
 		elif behavior == 'danger':
 			sett.ips[ip]['status'] = 'black'
 			log_info(
@@ -352,7 +353,7 @@ def decision(path:str, ip:str)->list:
 							.format(user_name)
 
 					else:
-						log_debug(f'send ip: {data}')
+						log_debug(f'send_ip error: {data}')
 						message = lang.access_error \
 							.format(user_name)
 				print_users()
@@ -362,23 +363,27 @@ def decision(path:str, ip:str)->list:
 		elif path == '/status':
 			if ip in sett.general['safe_hosts']:
 				try:
-					last_acc = max(
+					dates = [
 						d['last_access']
 							for d in sett.users.values()
 								if d['last_access']
-					)
-					for u in sett.users:
-						if sett.users[u]['last_access'] == last_acc:
-							last_user = u
-							last_ip = sett.users[u]['ips'][-1]
-							break
-					message = '{}\t{}\t{}'.format(
-						last_user
-						, last_acc.strftime('%Y.%m.%d %H:%M:%S')
-						, '.'.join(
-							last_ip.split('.')[:2]
-						) + '.*.*'
-					)
+					]
+					if dates:
+						last_acc = max(dates)
+						for u in sett.users:
+							if sett.users[u]['last_access'] == last_acc:
+								last_user = u
+								last_ip = sett.users[u]['ips'][-1]
+								break
+						message = '{}\t{}\t{}'.format(
+							last_user
+							, last_acc.strftime('%Y.%m.%d %H:%M:%S')
+							, '.'.join(
+								last_ip.split('.')[:2]
+							) + '.*.*'
+						)
+					else:
+						message = 'nobody\tnever\nnowhere'
 				except Exception as e:
 					log_debug('status error: ' + repr(e))
 					message = 'nobody\tnever\nnowhere'
@@ -439,15 +444,33 @@ class KnockHandler(BaseHTTPRequestHandler):
 		try:
 			super().handle_one_request()
 			req_type = str(s.raw_requestline
-				, 'iso-8859-1').split()[0].upper()
+				, encoding='iso-8859-1').split()[0].upper()
 			if req_type != 'GET':
 				process_ip(s.address_string()
 					, 'danger', 'wrong request method')
+		except ConnectionResetError:
+			log_debug(f'IP {s.address_string()} - connection reset')
+			process_ip(s.address_string(), 'bad', 'port scan')
+		except IndexError:
+			try:
+				rr = str(s.raw_requestline, encoding='iso-8859-1')
+			except Exception as e:
+				log_debug(
+					'IP {} - raw_requestline error: {}'.format(
+						s.address_string(), repr(e)
+					)
+				)
+			else:
+				log_debug(
+					'IP {} - raw_requestline: {} (len={})'.format(
+						s.address_string(), rr, len(rr)
+					)
+				)
 		except Exception as e:
-			log_debug('handle_one_request exception:'
-				+ f' {repr(e)[:40]}')
+			log_debug('IP {} - h_o_r exception: {}'.format(
+				s.address_string(), repr(e)[:40]) )
 			process_ip(s.address_string()
-				, 'danger', 'port scan')
+				, 'danger', 'h_o_r exception')
 				
 	def send_error(s, code, message=None
 	, explain=None):
@@ -462,17 +485,19 @@ class KnockHandler(BaseHTTPRequestHandler):
 			
 	def do_GET(s):
 		if 'favicon.' in s.path:
-			log_debug(f'favicon request: {s.path}')
+			log_debug(f'IP {s.address_string()} -'
+				+ f' favicon request: {s.path}')
 			s.wfile.write(b'<link rel="icon" href="data:,">')
 			return
 		s.send_response(200)
 		s.send_header('Content-type','text/html; charset=utf-8')
 		s.end_headers()
-		status, data = decision(s.path, s.address_string())
+		status, data = decision(s.path, s.address_string() )
 		if status:
 			message = data
 		else:
-			log_debug(f'decision error: {data}')
+			log_debug('IP {} - decision error: {}'.format(
+				s.address_string(), data) )
 			message = lang.ban
 		if s.path == '/status':
 			page = message
@@ -522,7 +547,16 @@ def main():
 	formatter = logging.Formatter(log_format, "%Y.%m.%d %H:%M:%S")
 	ch.setFormatter(formatter)
 	logger.addHandler(ch)
-
+	if sett.general['log_file']:
+		if not os.path.exists('logs'): os.mkdir('logs')
+		fh = TimedRotatingFileHandler(
+			'logs/web_knocking.log'
+			, when='midnight'
+		)
+		fh.setFormatter(formatter)
+		fh.suffix = '%Y.%m.%d.log'
+		fh.setLevel(logging.DEBUG)
+		logger.addHandler(fh)
 	if os.path.exists('files/index.html'):
 		with open('files/index.html'
 		, encoding='utf-8-sig') as fd:
@@ -552,7 +586,6 @@ def main():
 			, 'last_day' : last_day
 			, 'ips' : []
 		}
-
 	lang = resources.Language(sett.general['language'])
 	print('It\'s a wonderful day to ban some robots!')
 	print(f'Version: {APP_VERSION}')
