@@ -23,7 +23,7 @@ Just download the archive from the release page.
 
 It should also work on Linux, but I haven't checked.
 
-Just download the project.
+Just download the project. No third-party dependencies.
 
 ## Usage
 Change settings in *settings.ini* to your own.
