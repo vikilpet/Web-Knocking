@@ -1,14 +1,17 @@
 
 import configparser
+import threading
+import time
 import atexit
 from http.server import BaseHTTPRequestHandler \
 	, ThreadingHTTPServer
 import os
 from datetime import datetime as dt, timedelta
+import msvcrt
 import resources
 from rosapi import rosapi_send
 
-APP_VERSION = 'v2020-04-20'
+APP_VERSION = 'v2020-04-23'
 INI_FILE = 'web_knocking.ini'
 DEF_DEVICE_TYPE = 'mikrotik_routeros'
 PASS_SEP = '_'
@@ -89,7 +92,7 @@ class EasyLogging:
 			sep - separator between columns.
 	'''
 	def __init__(s
-		, level:int=20
+		, level:int=10
 		, directory:str=None
 		, file_name_format:str='%Y-%m-%d.log'
 		, time_format:str='%Y.%m.%d %H:%M:%S'
@@ -114,7 +117,7 @@ class EasyLogging:
 			setattr(
 				EasyLogging
 				, key.lower()
-				, lambda s, *strings, l=key: s._log(*strings, level=l)
+				, lambda s, *strings, l=key: s._log(*strings, lvl=l)
 			)
 			setattr(EasyLogging, key.upper(), value)
 		s.lvl_pad = max(*map(len, levels))
@@ -132,19 +135,19 @@ class EasyLogging:
 			)
 		atexit.register(s._cleanup)
 
-	def _log(s, *strings, level:str='DEBUG'):
+	def _log(s, *strings, lvl:str='DEBUG'):
 		'Log to console and optionally to disk'
-		if s.levels.get(level, 0) < s.level: return
+		if s.levels.get(lvl, 0) < s.level: return
 		string = s.sep.join(strings)
 		t = dt.now().strftime(s.time_format)
-		msg = f'{t}{s.sep}{level:{s.lvl_pad}}{s.sep}{string}'
+		msg = f'{t}{s.sep}{lvl:{s.lvl_pad}}{s.sep}{string}'
 		print(msg)
 		if not s.filed: return
 		s._write_to_file(msg)
 		
 	def _cleanup(s):
 		if not s.filed: return
-		s._log('cleanup', level='DEBUG')
+		s._log('cleanup', lvl='DEBUG')
 		s.filed.close()
 	
 	def _write_to_file(s, msg):
@@ -161,7 +164,7 @@ class EasyLogging:
 
 	def __getattr__(s, name):
 		def method(*args, **kwargs):
-			s._log(level=name.upper(), *args, **kwargs)
+			s._log(lvl=name.upper(), *args, **kwargs)
 		return method
 
 class Settings:
@@ -335,14 +338,13 @@ def process_ip(ip:str, behavior:str
 			sett.ips[ip]['counter'] = 0
 			sett.ips[ip]['status'] = 'white'
 		elif behavior == 'bad':
-			log.debug(ip.ljust(15), f'bad behavior: {reason}')
+			log.info(ip.ljust(15), f'bad behavior: {reason}')
 		elif behavior == 'danger':
 			sett.ips[ip]['status'] = 'black'
 			log.info(ip.ljust(15), f'add to black list: {reason}')
 			status, data = send_ip(
 				ip
-				, list_name = \
-					sett.general['black_list']
+				, list_name = sett.general['black_list']
 				 , comment = ('web_knocking_'
 				 	+ reason.replace(' ', '_')
 				 )
@@ -449,7 +451,6 @@ def decision(path:str, ip:str)->list:
 							, f'send_ip error: {data}')
 						message = lang.access_error \
 							.format(user_name)
-				print_users()
 			else:
 				message = lang.pass_unknown
 				process_ip(ip, 'bad', 'unknown user')
@@ -532,7 +533,7 @@ def print_ips():
 		reason = sett.ips[ip]['reason']
 		print(f'{ip:{16}}', f'{status:{7}}'
 			, reason)
-	print('\n')
+	print('')
 
 class KnockHandler(BaseHTTPRequestHandler):
 	def handle_one_request(s):
@@ -612,11 +613,10 @@ class KnockHandler(BaseHTTPRequestHandler):
 		s.wfile.write(bytes(page, 'utf-8'))
 
 	def log_message(s, msg_format, *args):
-		if sett.general['developer']:
-			log.http(
-				s.address_string().ljust(15)
-				, ' '.join(args)
-			)
+		log.http(
+			s.address_string().ljust(15)
+			, ' '.join(args)
+		)
 
 def main():
 	global sett
@@ -624,6 +624,17 @@ def main():
 	global lang
 	try:
 		os.system('title Web Knocking')
+		import msvcrt
+		def key_wait():
+			while True:
+				if msvcrt.kbhit():
+					key = msvcrt.getch()
+					if key == b'u':
+						print_users()
+					elif key == b'i':
+						print_ips()
+				time.sleep(0.001)
+		threading.Thread(target=key_wait, daemon=True).start()
 	except:
 		pass
 	sett = Settings(keep_setting_case=True)
@@ -633,13 +644,12 @@ def main():
 		sett.device.setdefault(*opt)
 	if sett.general['developer']:
 		log = EasyLogging(
-			level=10, directory='logs'
+			level=0, directory='logs'
 			, add_levels=('HTTP', 10)
-			, sep=' : '
 		)
 	else:
 		d = 'logs' if sett.general['log_file'] else None
-		log = EasyLogging(directory=d)
+		log = EasyLogging(directory=d, add_levels=('HTTP', 10))
 	if os.path.exists('files/index.html'):
 		with open('files/index.html'
 		, encoding='utf-8') as fd:

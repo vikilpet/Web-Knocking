@@ -39,6 +39,9 @@
 	/ip firewall nat add src-address-list=white_list in-interface=WAN \
 	dst-port=80 action=dst-nat to-addresses=192.168.0.10 to-ports=80
 
+### Только для Windows:
+В консоли: нажмите «i» для вывода списка IP адресов, «u» для вывода списка пользователей
+
 ## Помощь проекту
 - Расскажите о проекте друзьям
 - Присылайте отчёты об ошибках

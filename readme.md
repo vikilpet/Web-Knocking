@@ -39,6 +39,9 @@ For white and black lists, make the rules according to your needs. For example, 
 	/ip firewall nat add src-address-list=white_list in-interface=WAN \
 	dst-port=80 action=dst-nat to-addresses=192.168.0.10 to-ports=80
 
+### Only in Windows:
+In console window: press «i» to print out IP addresses, «u» to print out users.
+
 ## Support project
 - [Donate via PayPal](https://www.paypal.me/vikil)
 - Correct my mistakes
