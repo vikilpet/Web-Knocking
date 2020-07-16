@@ -2,7 +2,6 @@
 import configparser
 import threading
 import time
-import atexit
 from http.server import BaseHTTPRequestHandler \
 	, ThreadingHTTPServer
 import os
@@ -10,8 +9,9 @@ from datetime import datetime as dt, timedelta
 import msvcrt
 import resources
 from rosapi import rosapi_send
+from easy_logging import EasyLogging
 
-APP_VERSION = 'v2020-04-23'
+APP_VERSION = 'v2020-07-16'
 INI_FILE = 'web_knocking.ini'
 DEF_DEVICE_TYPE = 'mikrotik_routeros'
 PASS_SEP = '_'
@@ -65,110 +65,9 @@ DEF_OPT_DEVICE = [
 	, ('password', 'admin')
 	, ('secure', True)
 ]
-class EasyLogging:
-	''' Logging to console and optionally to a disk.
-		Attributes:
-			level - log level. Default is 10 ('INFO')
-			Default levels:
-				'DEBUG' : 0
-				'INFO' : 10
-				'ERROR' : 20
-
-			time_format:str='%Y.%m.%d %H:%M:%S'
-
-			file_name_format:str='%Y-%m-%d.log'
-
-			directory - write log files to this folder.
-			If not specified - no logging to a file.
-
-			levels:dict - provide your own levels.
-			Format: {'level name 1': level_num1
-				, 'level name 2': level_num2}
-
-			add_levels - just add this level(s) to the default
-			levels. Format:
-				(('lvl 1', lvl_num1), ('lvl 2', lvl_num2))
-			
-			sep - separator between columns.
-	'''
-	def __init__(s
-		, level:int=10
-		, directory:str=None
-		, file_name_format:str='%Y-%m-%d.log'
-		, time_format:str='%Y.%m.%d %H:%M:%S'
-		, add_levels:list=None
-		, levels:dict={
-			'DEBUG' : 0
-			, 'INFO' : 10
-			, 'ERROR' : 20
-		}
-		, sep:str = ' : '
-	):
-		s.levels = levels
-		if add_levels:
-			if type(add_levels[0]) in [list, tuple]:
-				for l, n in add_levels:
-					s.levels[l] = n
-			else:
-				s.levels[add_levels[0]] = add_levels[1]
-		s.level = level
-		s.time_format = time_format
-		for key, value in levels.items():
-			setattr(
-				EasyLogging
-				, key.lower()
-				, lambda s, *strings, l=key: s._log(*strings, lvl=l)
-			)
-			setattr(EasyLogging, key.upper(), value)
-		s.lvl_pad = max(*map(len, levels))
-		s.sep = sep
-		s.filed = None
-		if directory:
-			if not os.path.exists(directory): os.mkdir(directory)
-			s.file_name_format = file_name_format
-			s.directory = directory
-			s.file_name = dt.now().strftime(
-				file_name_format)
-			s.filed = open(
-				os.path.join(s.directory, s.file_name)
-				, 'ta+'
-			)
-		atexit.register(s._cleanup)
-
-	def _log(s, *strings, lvl:str='DEBUG'):
-		'Log to console and optionally to disk'
-		if s.levels.get(lvl, 0) < s.level: return
-		string = s.sep.join(strings)
-		t = dt.now().strftime(s.time_format)
-		msg = f'{t}{s.sep}{lvl:{s.lvl_pad}}{s.sep}{string}'
-		print(msg)
-		if not s.filed: return
-		s._write_to_file(msg)
-		
-	def _cleanup(s):
-		if not s.filed: return
-		s._log('cleanup', lvl='DEBUG')
-		s.filed.close()
-	
-	def _write_to_file(s, msg):
-		fn = dt.now().strftime(s.file_name_format)
-		if fn != s.file_name:
-			s.file_name = fn
-			s.filed.close()
-			s.filed = open(
-				os.path.join(s.directory, s.file_name)
-				, 'ta+'
-			)
-		s.filed.write(msg + '\n')
-		s.filed.flush()
-
-	def __getattr__(s, name):
-		def method(*args, **kwargs):
-			s._log(lvl=name.upper(), *args, **kwargs)
-		return method
 
 class Settings:
-	'''	2020.04.06 20:48:34
+	'''	2020.04.06
 		Load settings from .ini file.
 		Sections became instance properties:
 		[Section1]
@@ -618,6 +517,57 @@ class KnockHandler(BaseHTTPRequestHandler):
 			, ' '.join(args)
 		)
 
+def load_settings()->tuple:
+	''' Load settings from .ini file.
+	'''
+	try:
+		sett = Settings(keep_setting_case=True)
+		for opt in DEF_OPT_GENERAL:
+			sett.general.setdefault(*opt)
+		for opt in DEF_OPT_DEVICE:
+			sett.device.setdefault(*opt)
+			sett.ips = {}
+		if isinstance(sett.general['safe_hosts'], str):
+			ip_string = sett.general['safe_hosts']
+			sett.general['safe_hosts'] = []
+			for ip in ip_string.split(','):
+				sett.general['safe_hosts'].append(
+					ip.strip()
+				)
+		users_di = sett.users
+		sett.users = {}
+		for user in users_di:
+			if ' ' in users_di[user]:
+				passcode, last_day = \
+					users_di[user].split()
+			else:
+				passcode = users_di[user]
+				last_day = None
+			sett.users[user] = {
+				'passcode' : passcode
+				, 'last_access' : None
+				, 'last_day' : last_day
+				, 'ips' : []
+			}
+		if os.path.exists('files/index.html'):
+			with open('files/index.html'
+			, encoding='utf-8') as fd:
+				sett.html = fd.read()
+		else:
+			sett.html = resources.HTML_DEFAULT
+		if sett.device['device_type'] == \
+		DEF_DEVICE_TYPE:
+			sett.rosapi_args = {
+				'ip' : sett.device['host']
+				, 'port' : sett.device['port']
+				, 'username' : sett.device['username']
+				, 'password' : sett.device['password']
+				, 'secure' : sett.device['secure']
+			}
+		return True, sett
+	except Exception as e:
+		return False, repr(e)
+
 def main():
 	global sett
 	global log
@@ -626,22 +576,37 @@ def main():
 		os.system('title Web Knocking')
 		import msvcrt
 		def key_wait():
+			global sett
 			while True:
 				if msvcrt.kbhit():
 					key = msvcrt.getch()
-					if key == b'u':
+					log.debug('key:', key)
+					if key in [b'u', b'\xa3']:
 						print_users()
-					elif key == b'i':
+					elif key in [b'i', b'\xe8']:
 						print_ips()
+					elif key in [b's', b'\xeb']:
+						log.info('reload settings')
+						status, data = load_settings()
+						if status:
+							data.ips = sett.ips
+							for u in sett.users:
+								if data.users.get(u):
+									data.users[u]['last_access'] = \
+										sett.users[u]['last_access']
+									data.users[u]['ips'] = sett.users[u]['ips']
+							sett = data
+							print_users()
+						else:
+							log.error('failed to reload settings:', data)
 				time.sleep(0.001)
 		threading.Thread(target=key_wait, daemon=True).start()
 	except:
 		pass
-	sett = Settings(keep_setting_case=True)
-	for opt in DEF_OPT_GENERAL:
-		sett.general.setdefault(*opt)
-	for opt in DEF_OPT_DEVICE:
-		sett.device.setdefault(*opt)
+	status, sett = load_settings()
+	if not status:
+		print('Error loading settings:', sett)
+		exit(1)
 	if sett.general['developer']:
 		log = EasyLogging(
 			level=0, directory='logs'
@@ -650,48 +615,14 @@ def main():
 	else:
 		d = 'logs' if sett.general['log_file'] else None
 		log = EasyLogging(directory=d, add_levels=('HTTP', 10))
-	if os.path.exists('files/index.html'):
-		with open('files/index.html'
-		, encoding='utf-8') as fd:
-			sett.html = fd.read()
-	else:
-		sett.html = resources.HTML_DEFAULT
-	sett.ips = {}
-	if isinstance(sett.general['safe_hosts'], str):
-		ip_string = sett.general['safe_hosts']
-		sett.general['safe_hosts'] = []
-		for ip in ip_string.split(','):
-			sett.general['safe_hosts'].append(
-				ip.strip()
-			)
-	users_di = sett.users
-	sett.users = {}
-	for user in users_di:
-		if ' ' in users_di[user]:
-			passcode, last_day = \
-				users_di[user].split()
-		else:
-			passcode = users_di[user]
-			last_day = None
-		sett.users[user] = {
-			'passcode' : passcode
-			, 'last_access' : None
-			, 'last_day' : last_day
-			, 'ips' : []
-		}
 	lang = resources.Language(sett.general['language'])
 	print('It\'s a wonderful day to ban some robots!')
 	print(f'Version: {APP_VERSION}')
 	print(lang.homepage)
 	print(lang.donate + '\n')
+	if sett.general['developer']:
+		print('\nDEVELOPER MODE')
 	if is_ros():
-		sett.rosapi_args = {
-			'ip' : sett.device['host']
-			, 'port' : sett.device['port']
-			, 'username' : sett.device['username']
-			, 'password' : sett.device['password']
-			, 'secure' : sett.device['secure']
-		}
 		status, data = rosapi_send(
 			**sett.rosapi_args
 			, cmd=[r'/log/info'
@@ -708,8 +639,6 @@ def main():
 					+ 'Check "/ip services"\n'
 					+ 'Check firewalls\n'
 			)
-	if sett.general['developer']:
-		print('\nDEVELOPER MODE')
 	print_users()
 	try:
 		port = sett.general['port'] 

@@ -12,7 +12,7 @@ For users who need to connect outside the office, we give a link like this:
 
 	http://100.100.1.2:2020/access_SeCrEtCoDe
 
-It is possible to support other vendors' devices with help of [netmiko](https://github.com/ktbyers/netmiko), but have MikroTik-s only.
+It is possible to support other vendors' devices with help of [netmiko](https://github.com/ktbyers/netmiko), but I only have MikroTik-s.
 
 ## Setup
 ### Option 1: EXE
@@ -40,7 +40,10 @@ For white and black lists, make the rules according to your needs. For example, 
 	dst-port=80 action=dst-nat to-addresses=192.168.0.10 to-ports=80
 
 ### Only in Windows:
-In console window: press «i» to print out IP addresses, «u» to print out users.
+In console window:
+- press «i» to print out IP addresses;
+- «u» to print out users;
+- «s» to reload settings so you can add new users without restart.
 
 ## Support project
 - [Donate via PayPal](https://www.paypal.me/vikil)
