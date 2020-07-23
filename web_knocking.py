@@ -11,7 +11,7 @@ import resources
 from rosapi import rosapi_send
 from easy_logging import EasyLogging
 
-APP_VERSION = 'v2020-07-16'
+APP_VERSION = 'v2020-07-23'
 INI_FILE = 'web_knocking.ini'
 DEF_DEVICE_TYPE = 'mikrotik_routeros'
 PASS_SEP = '_'
