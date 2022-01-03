@@ -18,14 +18,12 @@ if os.name == 'nt':
 	SetConsoleTitleW = ctypes.windll.kernel32.SetConsoleTitleW
 
 TITLE = 'Web Knocking'
-APP_VERSION = 'v2020-12-06'
+APP_VERSION = 'v2022-01-03'
 INI_FILE = 'web_knocking.ini'
 DEF_DEVICE_TYPE = 'mikrotik_routeros'
 PASS_SEP = '_'
 
 event_counter = 0
-
-
 sett = None
 {
 	'1.2.3.4' : {
@@ -103,7 +101,7 @@ class Settings:
 		Convert True/yes to bool.
 		Convert digits to int
 	'''
-	def __init__(s, keep_setting_case:bool=False):
+	def __init__(self, keep_setting_case:bool=False):
 		config = configparser.ConfigParser()
 		config.optionxform = str
 		try:
@@ -113,13 +111,12 @@ class Settings:
 		except FileNotFoundError:
 			print(f'{INI_FILE} file not found'
 				+ '\nPress any key to exit')
-
 		sections = {
 			s.lower() : config._sections[s]
 			for s in config._sections
 		}
 		for section in sections:
-			setattr(s, section, {})
+			setattr(self, section, {})
 			di = sections[section]
 			if keep_setting_case:
 				settings_names = di.keys()
@@ -127,16 +124,16 @@ class Settings:
 				settings_names = [
 					k.lower() for k in di]
 			for key in settings_names:
-				if di[key].lower() in ['true', 'yes']:
-					getattr(s, section)[key] = True
-				elif di[key].lower() in ['false', 'no']:
-					getattr(s, section)[key] = False
+				if di[key].lower() in ('true', 'yes'):
+					getattr(self, section)[key] = True
+				elif di[key].lower() in ('false', 'no'):
+					getattr(self, section)[key] = False
 				elif di[key].isdigit():
-					getattr(s, section)[key] = int(di[key])
+					getattr(self, section)[key] = int(di[key])
 				else:
-					getattr(s, section)[key] = di[key]
+					getattr(self, section)[key] = di[key]
 
-	def __getattr__(s, name):
+	def __getattr__(self, name):
 		try:
 			log.debug(f'Settings: unknown key: {name}')
 		except:
@@ -212,7 +209,6 @@ def process_ip(ip:str, behavior:str
 			reason - if none then ban immediately without
 				checking 'black_threshold'
 	'''
-
 	if not reason: reason = behavior
 	if ip in sett.ips and user: sett.ips[ip]['user'] = user
 	if behavior != 'good' \
@@ -299,6 +295,7 @@ def decision(path:str, ip:str)->list:
 		on success or (False, 'error text') on
 		exception.
 	'''
+	global sett
 	try:
 		message = ''
 		if path == '/':
@@ -411,21 +408,39 @@ def decision(path:str, ip:str)->list:
 			else:
 				process_ip(ip, behavior='danger', reason='status unsafe')
 				message = lang.ban
+		elif path == '/reload':
+			if ip in sett.general['safe_hosts']:
+				status, data = load_settings()
+				if status:
+					log.info(ip.ljust(15), 'settings reloaded')
+					sett = data
+					print_users()
+					message = 'reloaded'
+				else:
+					message = 'error'
+					log.error('failed to reload settings:', data)
+			else:
+				process_ip(ip, behavior='danger', reason='reload unsafe')
+				message = lang.ban
 		else:
 			process_ip(ip, behavior='danger', reason='wrong path')
 			message = lang.ban
 		return True, message			
 	except Exception as e:
 		process_ip(ip, behavior='bad', reason='decision error')
+		log.debug(f'line: {e.__traceback__.tb_lineno}')
 		return False, repr(e)
 
 def print_users():
 	'Print the dict of users as a table'
-	table = [ ['User', 'Last day', 'Last IP', 'Last Access'] ]
+	table = [ ['User', 'Last Day', 'Last IP', 'Last Access'] ]
 	for user in sett.users.values():
+		if last_day := user.get('last_day'):
+			if dt.strptime(last_day, '%Y-%m-%d') < dt.now():
+				last_day = '*' + last_day
 		table.append([
 			user['name']
-			, user.get('last_day', None)
+			, last_day
 			, user['ips'][-1] if user['ips'] else None
 			, user['last_access'].strftime('%Y.%m.%d %H:%M:%S') \
 				if user['last_access'] else None
@@ -444,122 +459,121 @@ def print_ips():
 	table_print(table, use_headers=True, sorting=[0, 1])
 
 class KnockHandler(BaseHTTPRequestHandler):
-	def handle_one_request(s):
+	def handle_one_request(self):
 		try:
 			super().handle_one_request()
-			req_type = str(s.raw_requestline
+			req_type = str(self.raw_requestline
 				, encoding='iso-8859-1').split()[0].upper()
 			if req_type != 'GET':
-				process_ip(s.address_string()
+				process_ip(self.address_string()
 					, behavior='danger', reason='wrong request method')
 		except ConnectionResetError:
-			log.debug(s.address_string().ljust(15)
+			log.debug(self.address_string().ljust(15)
 				, 'connection reset')
-			process_ip(s.address_string(), behavior='bad'
+			process_ip(self.address_string(), behavior='bad'
 				, reason='port scan')
 		except IndexError:
 			try:
-				rr = str(s.raw_requestline, encoding='iso-8859-1')
+				rr = str(self.raw_requestline, encoding='iso-8859-1')
 			except Exception as e:
 				log.debug(
-					s.address_string().ljust(15)
+					self.address_string().ljust(15)
 						, 'raw_requestline error: ' + repr(e))
 			else:
 				log.debug(
-					s.address_string().ljust(15)
+					self.address_string().ljust(15)
 					, 'raw_requestline: {} (len={})'.format(
 						rr, len(rr) )
 				)
 		except Exception as e:
 			log.debug(
-				s.address_string().ljust(15)
-				, 'h_o_r exception: ' + (repr(e)[:40])
+				self.address_string().ljust(15)
+				, 'h_o_r exception: ' + (repr(e)) \
+					+ f'\n\tat line: {e.__traceback__.tb_lineno}'
 			)
-			process_ip(s.address_string()
+			process_ip(self.address_string()
 				, behavior='danger', reason='h_o_r exception')
 				
-	def send_error(s, code, message=None
+	def send_error(self, code, message=None
 	, explain=None):
 		if code > 500:
-			s.send_response(200)
-			s.send_header('Content-type','text/html; charset=utf-8')
-			s.end_headers()
-			s.wfile.write(bytes(lang.ban, 'utf-8'))
+			self.send_response(200)
+			self.send_header('Content-type','text/html; charset=utf-8')
+			self.end_headers()
+			self.wfile.write(bytes(lang.ban, 'utf-8'))
 		else:
 			super().send_error(code, message, explain) 
 
 			
-	def do_GET(s):
-		if 'favicon.' in s.path:
-			log.debug(s.address_string().ljust(15)
-				, f'favicon request: {s.path}')
-			s.wfile.write(b'<link rel="icon" href="data:,">')
+	def do_GET(self):
+		if 'favicon.' in self.path:
+			self.wfile.write(sett.favicon)
 			return
-		s.send_response(200)
-		s.send_header('Content-type','text/html; charset=utf-8')
-		s.end_headers()
-		status, data = decision(s.path, s.address_string() )
+		self.send_response(200)
+		self.send_header('Content-type','text/html; charset=utf-8')
+		self.end_headers()
+		status, data = decision(self.path, self.address_string() )
 		if status:
 			message = data
 		else:
 			log.debug(
-				s.address_string().ljust(15)
+				self.address_string().ljust(15)
 				, 'decision error: ' + data
 			)
 			message = lang.ban
-		if s.path == '/status':
+		if self.path == '/status':
 			page = message
 		else:
 			page = sett.html.format(
 				message=message
 				, timestamp = dt.now() \
 					.strftime('%Y.%m.%d %H:%M:%S')
-				, ip_address = s.address_string()
+				, ip_address = self.address_string()
 				, ip_capt = lang.ip_capt
 				, time_capt = lang.time_capt
 				, page_title = lang.page_title
 			).replace('\n', '').replace('\t', '')
-		s.wfile.write(bytes(page, 'utf-8'))
+		self.wfile.write(bytes(page, 'utf-8'))
 
-	def log_message(s, msg_format, *args):
+	def log_message(self, msg_format, *args):
 		global event_counter
 		if args[0].startswith('GET /status') \
+		or args[0].startswith('GET /reload') \
 		and not sett.general['developer']:
 			return
 		event_counter += 1
 		set_title(event_counter)
 		log.http(
-			s.address_string().ljust(15)
+			self.address_string().ljust(15)
 			, ' '.join(args)
 		)
 
 def load_settings()->tuple:
-	''' Load settings from .ini file.
-	'''
+	''' Load settings from .ini file. '''
+	global sett
 	try:
-		sett = Settings(keep_setting_case=True)
+		new_sett = Settings(keep_setting_case=True)
 		for opt in DEF_OPT_GENERAL:
-			sett.general.setdefault(*opt)
+			new_sett.general.setdefault(*opt)
 		for opt in DEF_OPT_DEVICE:
-			sett.device.setdefault(*opt)
-			sett.ips = {}
-		if isinstance(sett.general['safe_hosts'], str):
-			ip_string = sett.general['safe_hosts']
-			sett.general['safe_hosts'] = []
+			new_sett.device.setdefault(*opt)
+			new_sett.ips = {}
+		if isinstance(new_sett.general['safe_hosts'], str):
+			ip_string = new_sett.general['safe_hosts']
+			new_sett.general['safe_hosts'] = []
 			for ip in ip_string.split(','):
-				sett.general['safe_hosts'].append(
+				new_sett.general['safe_hosts'].append(
 					ip.strip()
 				)
-		users_di = sett.users
-		sett.users = {}
+		users_di = new_sett.users
+		new_sett.users = {}
 		for user in users_di:
 			if ' ' in users_di[user]:
-				passcode, last_day = \
-					users_di[user].split()
+				passcode, last_day = users_di[user].split()
 			else:
 				passcode = users_di[user]
 				last_day = None
-			sett.users[user] = {
+			new_sett.users[user] = {
 				'name' : user
 				, 'passcode' : passcode
 				, 'last_access' : None
@@ -569,19 +583,31 @@ def load_settings()->tuple:
 		if os.path.exists('files/index.html'):
 			with open('files/index.html'
 			, encoding='utf-8') as fd:
-				sett.html = fd.read()
+				new_sett.html = fd.read()
 		else:
-			sett.html = resources.HTML_DEFAULT
-		if sett.device['device_type'] == \
-		DEF_DEVICE_TYPE:
-			sett.rosapi_args = {
-				'ip' : sett.device['host']
-				, 'port' : sett.device['port']
-				, 'username' : sett.device['username']
-				, 'password' : sett.device['password']
-				, 'secure' : sett.device['secure']
+			new_sett.html = resources.HTML_DEFAULT
+		if os.path.exists('files/favicon.png'):
+			with open('files/favicon.png'
+			, encoding='rb') as fd:
+				new_sett.favicon = fd.read()
+		else:
+			new_sett.favicon = resources.FAVICON
+		if new_sett.device['device_type'] == DEF_DEVICE_TYPE:
+			new_sett.rosapi_args = {
+				'ip' : new_sett.device['host']
+				, 'port' : new_sett.device['port']
+				, 'username' : new_sett.device['username']
+				, 'password' : new_sett.device['password']
+				, 'secure' : new_sett.device['secure']
 			}
-		return True, sett
+			if sett:
+				new_sett.ips = sett.ips
+				for u in sett.users:
+					if new_sett.users.get(u):
+						new_sett.users[u]['last_access'] = \
+							sett.users[u]['last_access']
+						new_sett.users[u]['ips'] = sett.users[u]['ips']
+		return True, new_sett
 	except Exception as e:
 		return False, repr(e)
 
@@ -688,19 +714,13 @@ def main():
 						log.info('reload settings')
 						status, data = load_settings()
 						if status:
-							data.ips = sett.ips
-							for u in sett.users:
-								if data.users.get(u):
-									data.users[u]['last_access'] = \
-										sett.users[u]['last_access']
-									data.users[u]['ips'] = sett.users[u]['ips']
 							sett = data
 							print_users()
 						else:
 							log.error('failed to reload settings:', data)
 				time.sleep(0.001)
-
 		threading.Thread(target=key_wait, daemon=True).start()
+	
 	status, sett = load_settings()
 	if not status:
 		print('Error loading settings:', sett)

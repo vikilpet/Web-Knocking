@@ -1,4 +1,3 @@
-# source: https://wiki.mikrotik.com/wiki/Manual:API_Python3
 import sys, binascii, socket, select, ssl
 import hashlib
 
@@ -174,7 +173,6 @@ def main():
 	passw = ""
 	secure = True
 	port = 0
-
 	if len(sys.argv) == 4:
 	  user = sys.argv[2]
 	  passw = sys.argv[3]
@@ -203,7 +201,6 @@ def main():
 		if sys.stdin in r[0]:
 			l = sys.stdin.readline()
 			l = l[:-1]
-
 			if l == '':
 				apiros.writeSentence(inputsentence)
 				inputsentence = []
